@@ -1,0 +1,5 @@
+dataset
+.env
+watch_folder/
+__pycache__/
+*.pyc
