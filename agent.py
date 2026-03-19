@@ -54,8 +54,8 @@ ZILLIZ_TOKEN   = os.getenv("ZILLIZ_TOKEN", "")
 COLLECTION_NAME = "video_traffic"
 WATCH_FOLDER    = Path("watch_folder")
 NORMALISER_PATH = Path("normaliser.npz")
-TOP_K           = 10
-MODEL           = "gpt-4o"
+TOP_K           = 4
+MODEL           = "gpt-4o-mini"
 
 # ---------------------------------------------------------------------------
 # Load normaliser (fitted during ingest)
@@ -174,6 +174,10 @@ def tool_retrieve_similar(feature_vector: list) -> dict:
     search_params = {"metric_type": "L2", "params": {"nprobe": 16}}
     # Ensure every element is a plain Python float — Milvus rejects int/numpy types
     query_vector = [float(x) for x in feature_vector]
+    if len(query_vector) != VECTOR_DIM:
+        raise ValueError(
+            f"feature_vector length mismatch: expected {VECTOR_DIM}, got {len(query_vector)}"
+        )
     results = col.search(
         data=[query_vector],
         anns_field="vector",
@@ -338,6 +342,8 @@ def run_agent(filepath: str) -> str:
     ]
 
     print(f"\n[AGENT] Processing: {filepath}")
+    # Request-scoped state to avoid relying on model-reconstructed vectors.
+    cached_feature_vector: list[float] | None = None
 
     while True:
         response = client.chat.completions.create(
@@ -365,7 +371,26 @@ def run_agent(filepath: str) -> str:
                     result = {"error": f"Unknown tool: {fn_name}"}
                 else:
                     try:
+                        if fn_name == "retrieve_similar":
+                            if cached_feature_vector is None:
+                                raise ValueError(
+                                    "No cached feature vector found for this request. "
+                                    "Call compute_stats_and_vector before retrieve_similar."
+                                )
+                            fn_args = {"feature_vector": cached_feature_vector}
+
                         result = TOOL_DISPATCH[fn_name](**fn_args)
+
+                        if fn_name == "compute_stats_and_vector":
+                            fv = result.get("feature_vector") if isinstance(result, dict) else None
+                            if not isinstance(fv, list):
+                                raise ValueError("compute_stats_and_vector returned invalid feature_vector")
+                            cached_feature_vector = [float(x) for x in fv]
+                            if len(cached_feature_vector) != VECTOR_DIM:
+                                raise ValueError(
+                                    "Cached feature vector length mismatch: "
+                                    f"expected {VECTOR_DIM}, got {len(cached_feature_vector)}"
+                                )
                     except Exception as exc:
                         result = {"error": str(exc)}
 
