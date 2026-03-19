@@ -54,7 +54,7 @@ ZILLIZ_TOKEN   = os.getenv("ZILLIZ_TOKEN", "")
 COLLECTION_NAME = "video_traffic"
 WATCH_FOLDER    = Path("watch_folder")
 NORMALISER_PATH = Path("normaliser.npz")
-TOP_K           = 4
+TOP_K           = 6
 MODEL           = "gpt-4o-mini"
 
 # ---------------------------------------------------------------------------
